@@ -1,4 +1,5 @@
 mod audio;
+mod mux;
 mod srt;
 mod transcribe;
 
@@ -23,6 +24,9 @@ enum Command {
         lang: Option<String>,
         #[arg(long = "translate-to")]
         translate_to: Option<String>,
+        /// Skip muxing captions into the video container; only write the .srt sidecar.
+        #[arg(long = "no-embed")]
+        no_embed: bool,
     },
     /// Watch a folder and process videos as they arrive.
     Watch {
@@ -42,7 +46,8 @@ fn main() -> ExitCode {
             video,
             lang,
             translate_to,
-        } => run(&video, lang.as_deref(), translate_to.as_deref()),
+            no_embed,
+        } => run(&video, lang.as_deref(), translate_to.as_deref(), no_embed),
         Command::Watch { folder, .. } => {
             println!("capcap watch: not yet implemented ({folder})");
             Ok(())
@@ -60,7 +65,12 @@ fn main() -> ExitCode {
     ExitCode::SUCCESS
 }
 
-fn run(video: &str, lang: Option<&str>, translate_to: Option<&str>) -> anyhow::Result<()> {
+fn run(
+    video: &str,
+    lang: Option<&str>,
+    translate_to: Option<&str>,
+    no_embed: bool,
+) -> anyhow::Result<()> {
     anyhow::ensure!(
         translate_to.is_none(),
         "--translate-to isn't implemented yet"
@@ -80,5 +90,16 @@ fn run(video: &str, lang: Option<&str>, translate_to: Option<&str>) -> anyhow::R
 
     std::fs::write(&srt_path, srt::format_srt(&cues))?;
     println!("Wrote {}", srt_path.display());
+
+    if !no_embed {
+        if mux::is_embeddable(video_path) {
+            println!("Embedding captions...");
+            let muxed_path = mux::embed_captions(video_path, &srt_path)?;
+            println!("Wrote {}", muxed_path.display());
+        } else {
+            println!("Skipping embed: unsupported container for mov_text");
+        }
+    }
+
     Ok(())
 }

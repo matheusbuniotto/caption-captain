@@ -24,4 +24,61 @@ fn run_produces_srt_sidecar_for_spoken_word_video() {
         srt.to_lowercase().contains("caption"),
         "expected recognizable speech in transcript:\n{srt}"
     );
+
+    let muxed_path = workdir.path().join("spoken-word.captioned.mp4");
+    assert!(
+        muxed_path.is_file(),
+        "expected muxed captioned video at {}",
+        muxed_path.display()
+    );
+
+    let input_size = fs::metadata("tests/fixtures/spoken-word.mp4").unwrap().len();
+    let output_size = fs::metadata(&muxed_path).unwrap().len();
+    let diff = input_size.abs_diff(output_size);
+    assert!(
+        diff < input_size / 10,
+        "expected a stream-copy remux to be nearly the same size (input {input_size}, output {output_size})"
+    );
+
+    let original_size = fs::metadata(&video_path).unwrap().len();
+    assert_eq!(
+        original_size, input_size,
+        "original input file must be untouched"
+    );
+
+    let probe = Command::new("ffprobe")
+        .args(["-v", "error", "-select_streams", "s", "-show_entries", "stream=codec_name"])
+        .arg(&muxed_path)
+        .output()
+        .expect("failed to run ffprobe");
+    let probe_out = String::from_utf8_lossy(&probe.stdout);
+    assert!(
+        probe_out.contains("mov_text"),
+        "expected a mov_text subtitle stream in muxed output, got:\n{probe_out}"
+    );
+}
+
+/// `--no-embed` skips muxing entirely, producing only the .srt sidecar.
+#[test]
+fn run_with_no_embed_skips_muxed_output() {
+    let workdir = tempfile::tempdir().unwrap();
+    let video_path = workdir.path().join("spoken-word.mp4");
+    fs::copy("tests/fixtures/spoken-word.mp4", &video_path).unwrap();
+
+    let status = Command::new(env!("CARGO_BIN_EXE_capcap"))
+        .arg("run")
+        .arg(&video_path)
+        .arg("--no-embed")
+        .status()
+        .expect("failed to run capcap binary");
+    assert!(status.success());
+
+    let srt_path = video_path.with_extension("srt");
+    assert!(srt_path.is_file(), "expected .srt sidecar to still be produced");
+
+    let muxed_path = workdir.path().join("spoken-word.captioned.mp4");
+    assert!(
+        !muxed_path.is_file(),
+        "expected no muxed video file with --no-embed"
+    );
 }
