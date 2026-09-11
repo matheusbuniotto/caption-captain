@@ -1,3 +1,6 @@
+# This repo isn't named `homebrew-*`, so `brew tap` needs the explicit URL:
+#   brew tap matheusbuniotto/caption-captain https://github.com/matheusbuniotto/caption-captain
+#   brew install capcap
 class Capcap < Formula
   desc "Zero-cloud, local-first video captioning, translation & container muxing"
   homepage "https://github.com/matheusbuniotto/caption-captain"

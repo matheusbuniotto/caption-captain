@@ -7,6 +7,9 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
+permissions:
+  contents: write
+
 jobs:
   build:
     strategy:
@@ -80,23 +83,23 @@ jobs:
       - name: Update Homebrew formula
         run: |
           version="${GITHUB_REF_NAME#v}"
-          sha_arm64=$(awk '/capcap-macos-arm64.tar.gz/ {print $1}' dist/checksums.txt)
-          sha_x86_64=$(awk '/capcap-macos-x86_64.tar.gz/ {print $1}' dist/checksums.txt)
-          sha_linux=$(awk '/capcap-linux-x86_64.tar.gz/ {print $1}' dist/checksums.txt)
 
-          sed -i \
-            -e "s/version \"[0-9.]*\"/version \"${version}\"/" \
-            -e "s#download/v[0-9.]*/capcap-macos-arm64#download/${GITHUB_REF_NAME}/capcap-macos-arm64#" \
-            -e "s#download/v[0-9.]*/capcap-macos-x86_64#download/${GITHUB_REF_NAME}/capcap-macos-x86_64#" \
-            -e "s#download/v[0-9.]*/capcap-linux-x86_64#download/${GITHUB_REF_NAME}/capcap-linux-x86_64#" \
-            Formula/capcap.rb
+          sed -i "s/version \"[0-9.]*\"/version \"${version}\"/" Formula/capcap.rb
 
-          awk -v sha="$sha_arm64" '/capcap-macos-arm64/{f=1} f&&/sha256/{sub(/"[a-f0-9]*"/,"\""sha"\""); f=0} {print}' Formula/capcap.rb > /tmp/f1 && mv /tmp/f1 Formula/capcap.rb
-          awk -v sha="$sha_x86_64" '/capcap-macos-x86_64/{f=1} f&&/sha256/{sub(/"[a-f0-9]*"/,"\""sha"\""); f=0} {print}' Formula/capcap.rb > /tmp/f2 && mv /tmp/f2 Formula/capcap.rb
-          awk -v sha="$sha_linux" '/capcap-linux-x86_64/{f=1} f&&/sha256/{sub(/"[a-f0-9]*"/,"\""sha"\""); f=0} {print}' Formula/capcap.rb > /tmp/f3 && mv /tmp/f3 Formula/capcap.rb
+          for asset in capcap-macos-arm64 capcap-macos-x86_64 capcap-linux-x86_64; do
+            sha=$(awk -v a="$asset" '$0 ~ a".tar.gz" {print $1}' dist/checksums.txt)
+            sed -i \
+              -e "s#download/v[0-9.]*/${asset}.tar.gz#download/${GITHUB_REF_NAME}/${asset}.tar.gz#" \
+              Formula/capcap.rb
+            awk -v asset="$asset" -v sha="$sha" \
+              '$0 ~ asset {f=1} f && /sha256/ {sub(/"[a-f0-9]*"/, "\"" sha "\""); f=0} {print}' \
+              Formula/capcap.rb > /tmp/formula.rb && mv /tmp/formula.rb Formula/capcap.rb
+          done
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add Formula/capcap.rb
           git commit -m "Update Homebrew formula for ${GITHUB_REF_NAME}"
+          git fetch origin master
+          git rebase origin/master
           git push origin HEAD:master
