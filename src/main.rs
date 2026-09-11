@@ -1,8 +1,4 @@
-mod audio;
-mod mux;
-mod srt;
-mod transcribe;
-
+use capcap::pipeline::{self, PipelineOptions, PipelineStage};
 use clap::{Parser, Subcommand};
 use std::path::Path;
 use std::process::ExitCode;
@@ -52,10 +48,7 @@ fn main() -> ExitCode {
             println!("capcap watch: not yet implemented ({folder})");
             Ok(())
         }
-        Command::Gui => {
-            println!("capcap gui: not yet implemented");
-            Ok(())
-        }
+        Command::Gui => launch_gui(),
     };
 
     if let Err(err) = result {
@@ -65,6 +58,9 @@ fn main() -> ExitCode {
     ExitCode::SUCCESS
 }
 
+/// Thin CLI wrapper around the shared pipeline: turns each `PipelineStage`
+/// into the same `println!`/`eprintln!` calls the CLI has always made, so
+/// `tests/run_transcribe.rs` sees byte-for-byte unchanged output.
 fn run(
     video: &str,
     lang: Option<&str>,
@@ -79,37 +75,70 @@ fn run(
     let video_path = Path::new(video);
     anyhow::ensure!(video_path.is_file(), "no such video file: {video}");
 
-    let srt_path = video_path.with_extension("srt");
-    let workdir = tempfile::tempdir()?;
+    let options = PipelineOptions {
+        lang: lang.map(str::to_string),
+        no_embed,
+    };
 
-    println!("Extracting audio...");
-    let wav_path = audio::extract_wav(video_path, workdir.path())?;
-
-    println!("Transcribing...");
-    let cues = transcribe::transcribe(&wav_path, lang)?;
-
-    std::fs::write(&srt_path, srt::format_srt(&cues))?;
-    println!("Wrote {}", srt_path.display());
-
-    if !no_embed {
-        match mux::mux_strategy(video_path) {
-            mux::MuxStrategy::SidecarOnly => {
-                let ext = video_path
-                    .extension()
-                    .and_then(|e| e.to_str())
-                    .unwrap_or("(no extension)");
-                eprintln!(
-                    "Warning: embedding captions isn't reliable/supported for .{ext} files; \
-                     wrote only the .srt sidecar."
-                );
-            }
-            embeddable_strategy => {
-                println!("Embedding captions...");
-                let muxed_path = mux::embed_captions(video_path, &srt_path, embeddable_strategy)?;
+    pipeline::process_video(video_path, &options, |stage| match stage {
+        PipelineStage::ExtractingAudio => println!("Extracting audio..."),
+        PipelineStage::Transcribing => println!("Transcribing..."),
+        PipelineStage::WritingSidecar { srt_path } => println!("Wrote {}", srt_path.display()),
+        PipelineStage::Embedding => println!("Embedding captions..."),
+        PipelineStage::SkippedEmbed { reason } => eprintln!("Warning: {reason}"),
+        PipelineStage::Done { muxed_path, .. } => {
+            if let Some(muxed_path) = muxed_path {
                 println!("Wrote {}", muxed_path.display());
             }
         }
-    }
+    })
+    .map(|_| ())
+}
 
-    Ok(())
+/// `capcap gui` launches the Tauri desktop app rather than reimplementing
+/// it here: the GUI is a separate binary (built by `gui/src-tauri`) so the
+/// CLI crate never needs the Tauri/webview toolchain to build or test.
+/// We look for it next to the running `capcap` binary first (that's where
+/// packaged release bundles and local dev builds put it), then fall back
+/// to PATH, and otherwise tell the user how to build/run it themselves.
+fn launch_gui() -> anyhow::Result<()> {
+    let gui_binary_name = if cfg!(windows) {
+        "capcap-gui.exe"
+    } else {
+        "capcap-gui"
+    };
+
+    let candidate = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(|dir| dir.join(gui_binary_name)))
+        .filter(|path| path.is_file());
+
+    let gui_path = match candidate {
+        Some(path) => Some(path),
+        None => which_on_path(gui_binary_name),
+    };
+
+    match gui_path {
+        Some(path) => {
+            std::process::Command::new(path)
+                .spawn()
+                .map_err(|e| anyhow::anyhow!("failed to launch capcap-gui: {e}"))?;
+            Ok(())
+        }
+        None => {
+            println!(
+                "capcap gui: no {gui_binary_name} found next to this binary or on PATH.\n\
+                 Build it with `cd gui && npm install && npm run tauri build`, or run it in \
+                 dev mode with `cd gui && npm install && npx tauri dev`."
+            );
+            Ok(())
+        }
+    }
+}
+
+fn which_on_path(binary_name: &str) -> Option<std::path::PathBuf> {
+    let path_var = std::env::var_os("PATH")?;
+    std::env::split_paths(&path_var)
+        .map(|dir| dir.join(binary_name))
+        .find(|path| path.is_file())
 }
