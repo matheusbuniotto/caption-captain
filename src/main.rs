@@ -1,4 +1,10 @@
+mod audio;
+mod srt;
+mod transcribe;
+
 use clap::{Parser, Subcommand};
+use std::path::Path;
+use std::process::ExitCode;
 
 /// Captain Caption: zero-cloud local video captioning, translation & muxing.
 #[derive(Parser)]
@@ -28,18 +34,51 @@ enum Command {
     Gui,
 }
 
-fn main() {
+fn main() -> ExitCode {
     let cli = Cli::parse();
 
-    match cli.command {
-        Command::Run { video, .. } => {
-            println!("capcap run: not yet implemented ({video})");
-        }
+    let result = match cli.command {
+        Command::Run {
+            video,
+            lang,
+            translate_to,
+        } => run(&video, lang.as_deref(), translate_to.as_deref()),
         Command::Watch { folder, .. } => {
             println!("capcap watch: not yet implemented ({folder})");
+            Ok(())
         }
         Command::Gui => {
             println!("capcap gui: not yet implemented");
+            Ok(())
         }
+    };
+
+    if let Err(err) = result {
+        eprintln!("error: {err:#}");
+        return ExitCode::FAILURE;
     }
+    ExitCode::SUCCESS
+}
+
+fn run(video: &str, lang: Option<&str>, translate_to: Option<&str>) -> anyhow::Result<()> {
+    anyhow::ensure!(
+        translate_to.is_none(),
+        "--translate-to isn't implemented yet"
+    );
+
+    let video_path = Path::new(video);
+    anyhow::ensure!(video_path.is_file(), "no such video file: {video}");
+
+    let srt_path = video_path.with_extension("srt");
+    let workdir = tempfile::tempdir()?;
+
+    println!("Extracting audio...");
+    let wav_path = audio::extract_wav(video_path, workdir.path())?;
+
+    println!("Transcribing...");
+    let cues = transcribe::transcribe(&wav_path, lang)?;
+
+    std::fs::write(&srt_path, srt::format_srt(&cues))?;
+    println!("Wrote {}", srt_path.display());
+    Ok(())
 }

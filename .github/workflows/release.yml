@@ -34,6 +34,10 @@ jobs:
         with:
           targets: ${{ matrix.target }}
       - uses: Swatinem/rust-cache@v2
+      - uses: actions/cache@v4
+        with:
+          path: target/model-cache
+          key: whisper-tiny-q5_1-${{ runner.os }}
       - run: cargo build --release --target ${{ matrix.target }}
 
       - name: Package (unix)
