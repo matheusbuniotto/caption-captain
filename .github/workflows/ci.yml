@@ -25,3 +25,20 @@ jobs:
       - run: cargo fmt --check
       - run: cargo check --all-targets
       - run: cargo clippy --all-targets -- -D warnings
+
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/cache@v4
+        with:
+          path: target/model-cache
+          key: whisper-tiny-q5_1-${{ runner.os }}
+      - uses: actions/cache@v4
+        with:
+          path: target/release/ffmpeg
+          key: ffmpeg-sidecar-${{ runner.os }}
+      - run: cargo test --release

@@ -18,15 +18,19 @@ jobs:
           - os: macos-latest
             target: aarch64-apple-darwin
             name: capcap-macos-arm64
+            ffmpeg_url: https://www.osxexperts.net/ffmpeg80arm.zip
           - os: macos-latest
             target: x86_64-apple-darwin
             name: capcap-macos-x86_64
+            ffmpeg_url: https://evermeet.cx/ffmpeg/getrelease/zip
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             name: capcap-linux-x86_64
+            ffmpeg_url: https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             name: capcap-windows-x86_64
+            ffmpeg_url: https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -40,16 +44,40 @@ jobs:
           key: whisper-tiny-q5_1-${{ runner.os }}
       - run: cargo build --release --target ${{ matrix.target }}
 
+      # Downloads the same static ffmpeg binary ffmpeg-sidecar would fetch
+      # at runtime, and places it next to the capcap binary before packaging,
+      # so a released binary never needs network access to get ffmpeg.
+      - name: Provision bundled ffmpeg (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          curl -fsSL "${{ matrix.ffmpeg_url }}" -o ffmpeg.zip
+          unzip -o ffmpeg.zip -d target/${{ matrix.target }}/release
+          chmod +x target/${{ matrix.target }}/release/ffmpeg
+      - name: Provision bundled ffmpeg (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          curl -fsSL "${{ matrix.ffmpeg_url }}" -o ffmpeg.tar.xz
+          tar xJf ffmpeg.tar.xz
+          mv ffmpeg-*-static/ffmpeg target/${{ matrix.target }}/release/ffmpeg
+          chmod +x target/${{ matrix.target }}/release/ffmpeg
+      - name: Provision bundled ffmpeg (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          curl -fsSL "${{ matrix.ffmpeg_url }}" -o ffmpeg.zip
+          unzip -o ffmpeg.zip -d ffmpeg-extracted
+          find ffmpeg-extracted -name ffmpeg.exe -exec cp {} target/${{ matrix.target }}/release/ffmpeg.exe \;
+
       - name: Package (unix)
         if: runner.os != 'Windows'
         run: |
           cd target/${{ matrix.target }}/release
-          tar czf ${{ github.workspace }}/${{ matrix.name }}.tar.gz capcap
+          tar czf ${{ github.workspace }}/${{ matrix.name }}.tar.gz capcap ffmpeg
       - name: Package (windows)
         if: runner.os == 'Windows'
         run: |
           cd target/${{ matrix.target }}/release
-          7z a ${{ github.workspace }}/${{ matrix.name }}.zip capcap.exe
+          7z a ${{ github.workspace }}/${{ matrix.name }}.zip capcap.exe ffmpeg.exe
 
       - uses: actions/upload-artifact@v4
         with:
