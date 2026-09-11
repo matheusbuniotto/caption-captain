@@ -92,12 +92,22 @@ fn run(
     println!("Wrote {}", srt_path.display());
 
     if !no_embed {
-        if mux::is_embeddable(video_path) {
-            println!("Embedding captions...");
-            let muxed_path = mux::embed_captions(video_path, &srt_path)?;
-            println!("Wrote {}", muxed_path.display());
-        } else {
-            println!("Skipping embed: unsupported container for mov_text");
+        match mux::mux_strategy(video_path) {
+            mux::MuxStrategy::SidecarOnly => {
+                let ext = video_path
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .unwrap_or("(no extension)");
+                eprintln!(
+                    "Warning: embedding captions isn't reliable/supported for .{ext} files; \
+                     wrote only the .srt sidecar."
+                );
+            }
+            embeddable_strategy => {
+                println!("Embedding captions...");
+                let muxed_path = mux::embed_captions(video_path, &srt_path, embeddable_strategy)?;
+                println!("Wrote {}", muxed_path.display());
+            }
         }
     }
 
