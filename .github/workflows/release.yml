@@ -87,8 +87,71 @@ jobs:
             ${{ github.workspace }}/${{ matrix.name }}.zip
           if-no-files-found: ignore
 
+  build-gui:
+    strategy:
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            name: capcap-gui-macos-arm64
+            ffmpeg_url: https://www.osxexperts.net/ffmpeg80arm.zip
+          - target: x86_64-apple-darwin
+            name: capcap-gui-macos-x86_64
+            ffmpeg_url: https://evermeet.cx/ffmpeg/getrelease/zip
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: gui/src-tauri
+      - uses: actions/cache@v4
+        with:
+          path: target/model-cache
+          key: whisper-tiny-q5_1-${{ runner.os }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: npm ci
+        working-directory: gui
+        run: npm ci
+
+      # Unsigned, per this ticket's scope (no Apple Developer cert yet) --
+      # `--bundles app` only, since the ffmpeg binary still needs to be
+      # dropped into the .app below before the .dmg is made, and there's no
+      # point building a dmg we'd immediately throw away.
+      - name: tauri build (release, unsigned, app only)
+        working-directory: gui
+        run: npm run tauri build -- --target ${{ matrix.target }} --bundles app
+
+      # Same trick as the CLI job above: places a statically-fetched ffmpeg
+      # binary next to the app's executable (Contents/MacOS), which is
+      # where ffmpeg-sidecar's `auto_download` looks first, so the packaged
+      # .app never needs network access to get ffmpeg. The Whisper model is
+      # already offline: it's embedded into the binary at compile time by
+      # the root crate's build.rs.
+      - name: Provision bundled ffmpeg into the .app
+        run: |
+          app_dir="gui/src-tauri/target/${{ matrix.target }}/release/bundle/macos/Capcap.app/Contents/MacOS"
+          curl -fsSL "${{ matrix.ffmpeg_url }}" -o ffmpeg.zip
+          unzip -o ffmpeg.zip -d "$app_dir"
+          chmod +x "$app_dir/ffmpeg"
+
+      - name: Package .dmg
+        run: |
+          bundle_dir="gui/src-tauri/target/${{ matrix.target }}/release/bundle/macos"
+          hdiutil create -volname Capcap -srcfolder "$bundle_dir/Capcap.app" \
+            -ov -format UDZO "${{ github.workspace }}/${{ matrix.name }}.dmg"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: ${{ github.workspace }}/${{ matrix.name }}.dmg
+
   release:
-    needs: build
+    needs: [build, build-gui]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -111,6 +174,11 @@ jobs:
         with:
           files: dist/*
           generate_release_notes: true
+          body: |
+            **macOS desktop app (`capcap-gui-macos-*.dmg`) is unsigned** — no Apple Developer
+            cert yet. Gatekeeper will refuse to open it with a normal double-click.
+            To run it anyway: right-click (or Control-click) `Capcap.app` > **Open** >
+            confirm **Open** in the dialog. This is a one-time step per download.
 
       - name: Update Homebrew formula
         run: |

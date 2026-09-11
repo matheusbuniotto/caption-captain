@@ -40,3 +40,29 @@ jobs:
           path: target/release/ffmpeg
           key: ffmpeg-sidecar-${{ runner.os }}
       - run: cargo test --release
+
+  gui-build:
+    name: gui build (macOS, unsigned)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: gui/src-tauri
+      - uses: actions/cache@v4
+        with:
+          path: target/model-cache
+          key: whisper-tiny-q5_1-${{ runner.os }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      # Build-breakage smoke check for the desktop app, not a test suite:
+      # this doesn't need to launch the app, just confirm `tauri build`
+      # compiles the Rust backend and bundles the frontend, unsigned.
+      - name: npm ci
+        working-directory: gui
+        run: npm ci
+      - name: tauri build (debug, unsigned)
+        working-directory: gui
+        run: npm run tauri build -- --debug

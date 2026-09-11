@@ -44,9 +44,24 @@ capcap run "movie.mp4" --lang en
 - **Speed** — no upload queue, no waitin' on someone else's server.
 - **QuickTime compatibility** — Apple's players won't pick up a loose `.srt`; they want it embedded. `capcap` handles that muxing for ye.
 
+## Desktop app (macOS)
+
+Don't want a terminal? Grab `capcap-gui-macos-arm64.dmg` (Apple Silicon) or
+`capcap-gui-macos-x86_64.dmg` (Intel) from the [latest release](../../releases/latest),
+drag a video onto the window, and go.
+
+**This build is unsigned** — no Apple Developer cert yet — so Gatekeeper blocks a plain
+double-click. To open it: right-click (or Control-click) `Capcap.app` in Finder, choose
+**Open**, then confirm **Open** in the dialog. You only need to do this once per download.
+
+`capcap gui` from the CLI launches this app if it's installed next to the `capcap`
+binary or on `PATH`; otherwise it tells you how to build it from `gui/`.
+
 ## Status
 
-Core CLI (transcribe → sidecar → container-aware mux) is seaworthy. A drag-and-drop desktop app for non-technical crew is charted on the roadmap — see the open issues for what's next.
+Core CLI (transcribe → sidecar → container-aware mux) is seaworthy. The desktop app above
+is macOS-first and unsigned for now; Windows/Linux GUI builds and code signing are tracked
+in the open issues.
 
 ---
 

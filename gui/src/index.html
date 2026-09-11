@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="styles.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Capcap</title>
+    <script type="module" src="/main.js" defer></script>
+  </head>
+
+  <body>
+    <main class="container">
+      <h1>Capcap</h1>
+      <p class="subtitle">Zero-cloud captioning. Drag a video in to get started.</p>
+
+      <div id="banner" class="banner hidden"></div>
+
+      <section id="drop-zone" class="drop-zone">
+        <p>Drop a video here</p>
+        <p class="formats" id="formats-list">Accepted: .mp4 .mov .mkv .avi .m4v</p>
+        <button id="browse-button" type="button">Browse Files…</button>
+        <div class="options">
+          <label for="lang-input">Language override (optional)</label>
+          <input id="lang-input" placeholder="e.g. en, pt, es — leave blank to auto-detect" />
+        </div>
+      </section>
+
+      <section id="progress-section" class="progress-section hidden">
+        <p id="progress-video-name"></p>
+        <ol id="progress-stages" class="stages">
+          <li data-stage="ExtractingAudio">Extracting Audio</li>
+          <li data-stage="Transcribing">Transcribing</li>
+          <li data-stage="Embedding">Embedding</li>
+        </ol>
+      </section>
+
+      <section id="result-section" class="result-section hidden">
+        <p id="result-message"></p>
+        <div class="result-actions">
+          <button id="reveal-button" type="button">Reveal in Finder</button>
+          <button id="open-button" type="button">Open in Player</button>
+        </div>
+        <button id="process-another-button" type="button" class="secondary">
+          Process Another Video
+        </button>
+      </section>
+
+      <section id="error-section" class="error-section hidden">
+        <p id="error-message"></p>
+        <button id="error-dismiss-button" type="button" class="secondary">Try Again</button>
+      </section>
+    </main>
+  </body>
+</html>

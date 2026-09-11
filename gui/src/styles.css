@@ -1,0 +1,151 @@
+:root {
+  font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 400;
+
+  color: #0f0f0f;
+  background-color: #f6f6f6;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-text-size-adjust: 100%;
+}
+
+.container {
+  margin: 0 auto;
+  max-width: 560px;
+  padding: 3vh 2rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+h1 {
+  margin-bottom: 0.25rem;
+}
+
+.subtitle {
+  margin-top: 0;
+  color: #555;
+}
+
+.hidden {
+  display: none !important;
+}
+
+.banner {
+  width: 100%;
+  background: #fff3cd;
+  border: 1px solid #ffe08a;
+  color: #7a5b00;
+  border-radius: 8px;
+  padding: 0.6rem 1rem;
+  margin-bottom: 1rem;
+}
+
+.drop-zone {
+  width: 100%;
+  border: 2px dashed #aaa;
+  border-radius: 12px;
+  padding: 2.5rem 1.5rem;
+  transition: border-color 0.2s, background-color 0.2s;
+}
+
+.drop-zone.drag-over {
+  border-color: #396cd8;
+  background-color: #eef3ff;
+}
+
+.formats {
+  color: #777;
+  font-size: 0.85rem;
+}
+
+button {
+  border-radius: 8px;
+  border: 1px solid transparent;
+  padding: 0.6em 1.2em;
+  font-size: 1em;
+  font-weight: 500;
+  cursor: pointer;
+  background-color: #396cd8;
+  color: white;
+  margin-top: 0.75rem;
+}
+
+button:hover {
+  background-color: #2f5bb8;
+}
+
+button.secondary {
+  background-color: transparent;
+  color: #396cd8;
+  border: 1px solid #396cd8;
+}
+
+.options {
+  margin-top: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+}
+
+.options label {
+  font-size: 0.85rem;
+  color: #555;
+}
+
+.options input {
+  width: 100%;
+  padding: 0.5em;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+}
+
+.progress-section,
+.result-section,
+.error-section {
+  width: 100%;
+}
+
+.stages {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  text-align: left;
+}
+
+.stages li {
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  background: #eee;
+  color: #888;
+}
+
+.stages li.active {
+  background: #dceafe;
+  color: #1a3c8c;
+  font-weight: 600;
+}
+
+.stages li.done {
+  background: #dcfce7;
+  color: #14532d;
+}
+
+.result-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+}
+
+.error-section p {
+  color: #a11;
+}
