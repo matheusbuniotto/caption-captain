@@ -32,7 +32,9 @@ fn run_produces_srt_sidecar_for_spoken_word_video() {
         muxed_path.display()
     );
 
-    let input_size = fs::metadata("tests/fixtures/spoken-word.mp4").unwrap().len();
+    let input_size = fs::metadata("tests/fixtures/spoken-word.mp4")
+        .unwrap()
+        .len();
     let output_size = fs::metadata(&muxed_path).unwrap().len();
     let diff = input_size.abs_diff(output_size);
     assert!(
@@ -47,7 +49,14 @@ fn run_produces_srt_sidecar_for_spoken_word_video() {
     );
 
     let probe = Command::new("ffprobe")
-        .args(["-v", "error", "-select_streams", "s", "-show_entries", "stream=codec_name"])
+        .args([
+            "-v",
+            "error",
+            "-select_streams",
+            "s",
+            "-show_entries",
+            "stream=codec_name",
+        ])
         .arg(&muxed_path)
         .output()
         .expect("failed to run ffprobe");
@@ -74,7 +83,10 @@ fn run_with_no_embed_skips_muxed_output() {
     assert!(status.success());
 
     let srt_path = video_path.with_extension("srt");
-    assert!(srt_path.is_file(), "expected .srt sidecar to still be produced");
+    assert!(
+        srt_path.is_file(),
+        "expected .srt sidecar to still be produced"
+    );
 
     let muxed_path = workdir.path().join("spoken-word.captioned.mp4");
     assert!(

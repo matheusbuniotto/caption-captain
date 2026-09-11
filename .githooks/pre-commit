@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Mirrors the CI "check" job: fmt, cargo check, clippy. Enable with:
+#   git config core.hooksPath .githooks
+set -euo pipefail
+
+echo "pre-commit: cargo fmt --check"
+cargo fmt --check
+
+echo "pre-commit: cargo check --all-targets"
+cargo check --all-targets
+
+echo "pre-commit: cargo clippy --all-targets -- -D warnings"
+cargo clippy --all-targets -- -D warnings
