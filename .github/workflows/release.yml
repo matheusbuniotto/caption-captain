@@ -1,0 +1,102 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            name: capcap-macos-arm64
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            name: capcap-macos-x86_64
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            name: capcap-linux-x86_64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            name: capcap-windows-x86_64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Package (unix)
+        if: runner.os != 'Windows'
+        run: |
+          cd target/${{ matrix.target }}/release
+          tar czf ${{ github.workspace }}/${{ matrix.name }}.tar.gz capcap
+      - name: Package (windows)
+        if: runner.os == 'Windows'
+        run: |
+          cd target/${{ matrix.target }}/release
+          7z a ${{ github.workspace }}/${{ matrix.name }}.zip capcap.exe
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: |
+            ${{ github.workspace }}/${{ matrix.name }}.tar.gz
+            ${{ github.workspace }}/${{ matrix.name }}.zip
+          if-no-files-found: ignore
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Checksums
+        run: |
+          cd dist
+          sha256sum * > checksums.txt
+
+      - name: Render install.sh
+        run: |
+          sed "s/@VERSION@/${GITHUB_REF_NAME}/" scripts/install.sh.tmpl > dist/install.sh
+          chmod +x dist/install.sh
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
+
+      - name: Update Homebrew formula
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          sha_arm64=$(awk '/capcap-macos-arm64.tar.gz/ {print $1}' dist/checksums.txt)
+          sha_x86_64=$(awk '/capcap-macos-x86_64.tar.gz/ {print $1}' dist/checksums.txt)
+          sha_linux=$(awk '/capcap-linux-x86_64.tar.gz/ {print $1}' dist/checksums.txt)
+
+          sed -i \
+            -e "s/version \"[0-9.]*\"/version \"${version}\"/" \
+            -e "s#download/v[0-9.]*/capcap-macos-arm64#download/${GITHUB_REF_NAME}/capcap-macos-arm64#" \
+            -e "s#download/v[0-9.]*/capcap-macos-x86_64#download/${GITHUB_REF_NAME}/capcap-macos-x86_64#" \
+            -e "s#download/v[0-9.]*/capcap-linux-x86_64#download/${GITHUB_REF_NAME}/capcap-linux-x86_64#" \
+            Formula/capcap.rb
+
+          awk -v sha="$sha_arm64" '/capcap-macos-arm64/{f=1} f&&/sha256/{sub(/"[a-f0-9]*"/,"\""sha"\""); f=0} {print}' Formula/capcap.rb > /tmp/f1 && mv /tmp/f1 Formula/capcap.rb
+          awk -v sha="$sha_x86_64" '/capcap-macos-x86_64/{f=1} f&&/sha256/{sub(/"[a-f0-9]*"/,"\""sha"\""); f=0} {print}' Formula/capcap.rb > /tmp/f2 && mv /tmp/f2 Formula/capcap.rb
+          awk -v sha="$sha_linux" '/capcap-linux-x86_64/{f=1} f&&/sha256/{sub(/"[a-f0-9]*"/,"\""sha"\""); f=0} {print}' Formula/capcap.rb > /tmp/f3 && mv /tmp/f3 Formula/capcap.rb
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/capcap.rb
+          git commit -m "Update Homebrew formula for ${GITHUB_REF_NAME}"
+          git push origin HEAD:master

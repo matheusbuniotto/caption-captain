@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Installs capcap @VERSION@ from GitHub Releases.
+set -euo pipefail
+
+VERSION="@VERSION@"
+REPO="matheusbuniotto/caption-captain"
+INSTALL_DIR="${CAPCAP_INSTALL_DIR:-/usr/local/bin}"
+
+os="$(uname -s)"
+arch="$(uname -m)"
+
+case "$os-$arch" in
+  Darwin-arm64)  asset="capcap-macos-arm64.tar.gz" ;;
+  Darwin-x86_64) asset="capcap-macos-x86_64.tar.gz" ;;
+  Linux-x86_64)  asset="capcap-linux-x86_64.tar.gz" ;;
+  *) echo "error: unsupported platform $os-$arch" >&2; exit 1 ;;
+esac
+
+url="https://github.com/${REPO}/releases/download/${VERSION}/${asset}"
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+
+echo "Downloading $url"
+curl -fsSL "$url" -o "$tmp/$asset"
+tar xzf "$tmp/$asset" -C "$tmp"
+
+install -d "$INSTALL_DIR"
+install "$tmp/capcap" "$INSTALL_DIR/capcap"
+
+echo "Installed capcap to $INSTALL_DIR/capcap"
