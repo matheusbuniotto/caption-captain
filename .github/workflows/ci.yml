@@ -22,9 +22,7 @@ jobs:
         with:
           path: target/model-cache
           key: whisper-tiny-q5_1
-      - run: cargo fmt --check
-      - run: cargo check --all-targets
-      - run: cargo clippy --all-targets -- -D warnings
+      - run: ./.githooks/pre-commit
 
   test:
     name: test
