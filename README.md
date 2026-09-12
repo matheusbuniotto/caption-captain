@@ -6,7 +6,7 @@
   <img src="assets/screenshot.png" alt="Capcap Screenshot" width="800">
 </p>
 
-Capcap transcribes speech in your videos locally on your machine using an embedded Whisper model. No cloud servers, no subscriptions, no accounts, and no network required.
+Capcap transcribes speech in your videos locally on your machine using an embedded Whisper model. No cloud servers, no subscriptions, no accounts, no limits, (e.g. you can caption that 1939 serbian movie) and no network required.
 
 ---
 
