@@ -37,8 +37,16 @@ jobs:
           key: whisper-tiny-q5_1-${{ runner.os }}
       - uses: actions/cache@v4
         with:
-          path: target/release/ffmpeg
+          path: |
+            target/release/ffmpeg
+            target/release/ffprobe
           key: ffmpeg-sidecar-${{ runner.os }}
+      # tests/run_transcribe.rs shells out to `ffprobe` directly (to inspect
+      # muxed output), expecting it on PATH; ffmpeg-sidecar's auto-download
+      # unpacks it next to the built binary, not onto PATH, so add that
+      # directory before the tests that need it run.
+      - name: Add bundled ffmpeg tools to PATH
+        run: echo "$GITHUB_WORKSPACE/target/release" >> "$GITHUB_PATH"
       - run: cargo test --release
 
   gui-build:
