@@ -87,7 +87,7 @@ Outputs (`video.srt` and `video.captioned.mp4`) are created right next to your o
 ---
 
 ### Roadmap
-[ ] Translate captions w/ local models -- hard because it will add heavy model at deps, probably will add a optional pull for model.
+[ ] Translate captions w/ local models -- hard because it will add heavy model at deps, probably will add a optional pull for model. \
 [ ] Add a option to pull bigger models for hard tasks, currently the model that is embedded is a tiny one (e.g. ~50mb), Ill add a feature to select bigger models that could get download locally.
 
 
