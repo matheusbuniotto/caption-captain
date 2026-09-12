@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Capcap — Zero-Cloud Video Captioning</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script src="/main.js" defer></script>
+  </head>
+
+  <body>
+    <header class="hero-band">
+      <div class="hero-content">
+        <div class="brand-row">
+          <div class="brand-logo">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H8v-2h3v2zm5 0h-3v-2h3v2zm1-4H8v-2h9v2zm0-4H8V6h9v2z" fill="#00ed64"/>
+            </svg>
+            <span class="brand-title">Capcap</span>
+          </div>
+          <span class="badge-pill badge-pill-dark">LOCAL FIRST</span>
+        </div>
+        <p class="hero-subtitle">Zero-cloud, local-first video captioning &amp; container muxing.</p>
+      </div>
+    </header>
+
+    <main class="app-container">
+      <div id="banner" class="banner hidden"></div>
+
+      <!-- Drop / Empty State -->
+      <section id="drop-zone" class="drop-zone">
+        <div class="drop-zone-inner">
+          <div class="upload-icon-wrapper">
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="17 8 12 3 7 8"></polyline>
+              <line x1="12" y1="3" x2="12" y2="15"></line>
+            </svg>
+          </div>
+          <h2 class="drop-title">Drop videos here</h2>
+          <p class="drop-hint">Drop single videos or multiple files for batch processing</p>
+
+          <div class="formats-row" id="formats-chips">
+            <span class="chip">.mp4</span>
+            <span class="chip">.mov</span>
+            <span class="chip">.mkv</span>
+            <span class="chip">.avi</span>
+            <span class="chip">.m4v</span>
+          </div>
+
+          <div class="drop-actions">
+            <button id="browse-button" type="button" class="btn-primary">Browse Files…</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Selection & Batch Configuration State -->
+      <section id="selection-section" class="card selection-section hidden">
+        <div class="section-header-row">
+          <div class="section-title-wrap">
+            <h3 class="section-title">Selected Videos</h3>
+            <span id="selection-count-badge" class="badge-pill badge-pill-soft">0 files</span>
+          </div>
+          <div class="header-actions">
+            <button id="add-more-button" type="button" class="btn-ghost-sm">+ Add More</button>
+            <button id="clear-selection-button" type="button" class="btn-ghost-sm text-danger">Clear All</button>
+          </div>
+        </div>
+
+        <div id="selected-files-list" class="file-list"></div>
+
+        <div class="options-box">
+          <div class="form-group">
+            <label for="lang-input" class="form-label">Language override (optional)</label>
+            <input
+              id="lang-input"
+              class="text-input"
+              placeholder="e.g. en, pt, es — leave blank to auto-detect"
+            />
+          </div>
+          <div class="checkbox-group">
+            <label class="checkbox-label">
+              <input id="embed-checkbox" type="checkbox" checked />
+              <span>Embed subtitles into video container when supported (.mp4, .mov, .mkv)</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="section-footer-actions">
+          <button id="start-button" type="button" class="btn-primary">Start Captioning</button>
+          <button id="cancel-selection-button" type="button" class="btn-secondary">Cancel</button>
+        </div>
+      </section>
+
+      <!-- Progress / Batch Running State -->
+      <section id="progress-section" class="card progress-section hidden">
+        <div class="progress-header">
+          <div>
+            <span class="eyebrow">PROCESSING BATCH</span>
+            <h3 id="progress-batch-title" class="section-title">Processing video 1 of 1</h3>
+          </div>
+          <span id="batch-progress-pct" class="badge-pill badge-pill-dark">0%</span>
+        </div>
+
+        <div class="progress-bar-track">
+          <div id="progress-bar-fill" class="progress-bar-fill" style="width: 0%"></div>
+        </div>
+
+        <div class="active-file-card">
+          <div class="active-file-meta">
+            <span class="active-label">Current:</span>
+            <span id="progress-current-filename" class="code-filename">filename.mp4</span>
+          </div>
+          <ol id="progress-stages" class="stages-row">
+            <li data-stage="ExtractingAudio">
+              <span class="stage-dot"></span>
+              <span class="stage-text">1. Extract Audio</span>
+            </li>
+            <li data-stage="Transcribing">
+              <span class="stage-dot"></span>
+              <span class="stage-text">2. Transcribe</span>
+            </li>
+            <li data-stage="Embedding">
+              <span class="stage-dot"></span>
+              <span class="stage-text">3. Embed</span>
+            </li>
+          </ol>
+        </div>
+
+        <div class="batch-queue-wrap">
+          <h4 class="queue-heading">Queue Status</h4>
+          <div id="progress-queue-list" class="queue-list"></div>
+        </div>
+      </section>
+
+      <!-- Results / Summary State -->
+      <section id="result-section" class="card result-section hidden">
+        <div class="result-header">
+          <div class="result-icon-wrap">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#00ed64" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+          </div>
+          <div>
+            <h3 class="section-title">Captioning Complete</h3>
+            <p id="result-summary-text" class="result-summary">Processed 1 video successfully.</p>
+          </div>
+        </div>
+
+        <div id="result-items-list" class="result-items-list"></div>
+
+        <div class="result-footer-actions">
+          <button id="process-another-button" type="button" class="btn-primary">
+            Process More Videos
+          </button>
+        </div>
+      </section>
+
+      <!-- Error State -->
+      <section id="error-section" class="card error-section hidden">
+        <div class="error-header">
+          <div class="error-icon-wrap">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#e02424" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="8" x2="12" y2="12"></line>
+              <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>
+          </div>
+          <h3 class="section-title text-danger">Processing Error</h3>
+        </div>
+        <p id="error-message" class="error-text"></p>
+        <div class="error-actions">
+          <button id="error-dismiss-button" type="button" class="btn-secondary">Try Again</button>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

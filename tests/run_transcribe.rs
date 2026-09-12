@@ -185,3 +185,30 @@ fn run_skips_embed_for_unsupported_container() {
         "expected a warning naming the unsupported container:\n{stderr}"
     );
 }
+
+/// Batch run: passing multiple videos processes each and produces outputs for all.
+#[test]
+fn run_processes_multiple_videos_in_batch() {
+    let workdir = tempfile::tempdir().unwrap();
+    let video1 = workdir.path().join("spoken-word-1.mp4");
+    let video2 = workdir.path().join("spoken-word-2.mkv");
+    fs::copy("tests/fixtures/spoken-word.mp4", &video1).unwrap();
+    fs::copy("tests/fixtures/spoken-word.mkv", &video2).unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_capcap"))
+        .arg("run")
+        .arg(&video1)
+        .arg(&video2)
+        .output()
+        .expect("failed to run capcap binary in batch");
+    assert!(output.status.success());
+
+    assert!(video1.with_extension("srt").is_file());
+    assert!(video2.with_extension("srt").is_file());
+    assert!(workdir.path().join("spoken-word-1.captioned.mp4").is_file());
+    assert!(workdir.path().join("spoken-word-2.captioned.mkv").is_file());
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("[1/2] Processing"));
+    assert!(stdout.contains("[2/2] Processing"));
+}

@@ -50,8 +50,7 @@ pub fn embed_captions(
         }
     };
 
-    ffmpeg_sidecar::download::auto_download()
-        .map_err(|e| anyhow::anyhow!("failed to provision bundled ffmpeg: {e}"))?;
+    crate::ffmpeg_provision::ensure_ffmpeg()?;
 
     let out_path = captioned_output_path(video_path);
 

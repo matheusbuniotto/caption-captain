@@ -8,8 +8,10 @@ use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextPar
 static TINY_MODEL: &[u8] = include_bytes!(env!("CAPCAP_TINY_MODEL_PATH"));
 
 /// Transcribes a 16kHz mono WAV file. Auto-detects the spoken language
-/// unless `lang` (an ISO 639-1 code, e.g. "en") forces one.
-pub fn transcribe(wav_path: &Path, lang: Option<&str>) -> Result<Vec<Cue>> {
+/// unless `lang` (an ISO 639-1 code, e.g. "en") forces one. Returns the
+/// cues alongside the language Whisper actually used (the forced `lang`,
+/// or whatever it auto-detected), as an ISO 639-1 code.
+pub fn transcribe(wav_path: &Path, lang: Option<&str>) -> Result<(Vec<Cue>, String)> {
     // whisper.cpp/GGML log straight to stdout/stderr by default; route them
     // into whisper-rs's hooks instead, which drops them since no log/tracing
     // backend is enabled, keeping CLI output clean.
@@ -37,6 +39,13 @@ pub fn transcribe(wav_path: &Path, lang: Option<&str>) -> Result<Vec<Cue>> {
         .full(params, &samples)
         .map_err(|e| anyhow::anyhow!("Whisper inference failed: {e}"))?;
 
+    let detected_language = lang.map(str::to_string).unwrap_or_else(|| {
+        let lang_id = state.full_lang_id_from_state();
+        whisper_rs::get_lang_str(lang_id)
+            .unwrap_or("unknown")
+            .to_string()
+    });
+
     let mut cues = Vec::new();
     for segment in state.as_iter() {
         let text = segment
@@ -52,7 +61,7 @@ pub fn transcribe(wav_path: &Path, lang: Option<&str>) -> Result<Vec<Cue>> {
             text,
         });
     }
-    Ok(cues)
+    Ok((cues, detected_language))
 }
 
 /// Reads a WAV file into mono f32 samples at whatever sample rate it was

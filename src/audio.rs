@@ -5,8 +5,7 @@ use std::path::{Path, PathBuf};
 /// Extracts a 16kHz mono WAV from `video_path` into a sibling temp file,
 /// using the managed ffmpeg binary (no system ffmpeg install required).
 pub fn extract_wav(video_path: &Path, out_dir: &Path) -> Result<PathBuf> {
-    ffmpeg_sidecar::download::auto_download()
-        .map_err(|e| anyhow::anyhow!("failed to provision bundled ffmpeg: {e}"))?;
+    crate::ffmpeg_provision::ensure_ffmpeg()?;
 
     let wav_path = out_dir.join("capcap-audio.wav");
 
