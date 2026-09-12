@@ -82,6 +82,7 @@ jobs:
         run: |
           cd target/${{ matrix.target }}/release
           7z a ${{ github.workspace }}/${{ matrix.name }}.zip capcap.exe ffmpeg.exe
+          cp capcap.exe ${{ github.workspace }}/${{ matrix.name }}.exe
 
       - uses: actions/upload-artifact@v4
         with:
@@ -89,19 +90,26 @@ jobs:
           path: |
             ${{ github.workspace }}/${{ matrix.name }}.tar.gz
             ${{ github.workspace }}/${{ matrix.name }}.zip
+            ${{ github.workspace }}/${{ matrix.name }}.exe
           if-no-files-found: ignore
 
   build-gui:
     strategy:
       matrix:
         include:
-          - target: aarch64-apple-darwin
+          - os: macos-latest
+            target: aarch64-apple-darwin
             name: capcap-gui-macos-arm64
             ffmpeg_url: https://www.osxexperts.net/ffmpeg80arm.zip
-          - target: x86_64-apple-darwin
+          - os: macos-latest
+            target: x86_64-apple-darwin
             name: capcap-gui-macos-x86_64
             ffmpeg_url: https://evermeet.cx/ffmpeg/getrelease/zip
-    runs-on: macos-latest
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            name: capcap-gui-windows-x86_64
+            ffmpeg_url: https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -124,36 +132,73 @@ jobs:
         run: npm ci
 
       # Unsigned, per this ticket's scope (no Apple Developer cert yet) --
-      # `--bundles app` only, since the ffmpeg binary still needs to be
-      # dropped into the .app below before the .dmg is made, and there's no
-      # point building a dmg we'd immediately throw away.
-      - name: tauri build (release, unsigned, app only)
+      # `--bundles app` only on macOS, since the ffmpeg binary still needs to be
+      # dropped into the .app below before the .dmg is made.
+      - name: tauri build (macOS, release, unsigned, app only)
+        if: runner.os == 'macOS'
         working-directory: gui
         run: npm run tauri build -- --target ${{ matrix.target }} --bundles app
 
-      # Same trick as the CLI job above: places a statically-fetched ffmpeg
-      # binary next to the app's executable (Contents/MacOS), which is
-      # where ffmpeg-sidecar's `auto_download` looks first, so the packaged
-      # .app never needs network access to get ffmpeg. The Whisper model is
-      # already offline: it's embedded into the binary at compile time by
-      # the root crate's build.rs.
-      - name: Provision bundled ffmpeg into the .app
+      - name: tauri build (Windows, release)
+        if: runner.os == 'Windows'
+        working-directory: gui
+        shell: bash
+        run: |
+          npm run tauri build -- --target ${{ matrix.target }} --bundles nsis || npm run tauri build -- --target ${{ matrix.target }} --no-bundle
+
+      # Provision statically-fetched ffmpeg binary next to the app's executable.
+      - name: Provision bundled ffmpeg into the .app (macOS)
+        if: runner.os == 'macOS'
         run: |
           app_dir="gui/src-tauri/target/${{ matrix.target }}/release/bundle/macos/Capcap.app/Contents/MacOS"
           curl -fsSL "${{ matrix.ffmpeg_url }}" -o ffmpeg.zip
           unzip -o ffmpeg.zip -d "$app_dir"
           chmod +x "$app_dir/ffmpeg"
 
-      - name: Package .dmg
+      - name: Provision bundled ffmpeg (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          rel_dir="gui/src-tauri/target/${{ matrix.target }}/release"
+          curl -fsSL "${{ matrix.ffmpeg_url }}" -o ffmpeg.zip
+          unzip -o ffmpeg.zip -d ffmpeg-extracted
+          find ffmpeg-extracted -name ffmpeg.exe -exec cp {} "$rel_dir/ffmpeg.exe" \;
+
+      - name: Package .dmg (macOS)
+        if: runner.os == 'macOS'
         run: |
           bundle_dir="gui/src-tauri/target/${{ matrix.target }}/release/bundle/macos"
           hdiutil create -volname Capcap -srcfolder "$bundle_dir/Capcap.app" \
             -ov -format UDZO "${{ github.workspace }}/${{ matrix.name }}.dmg"
 
+      - name: Package .app (macOS, zipped)
+        if: runner.os == 'macOS'
+        run: |
+          bundle_dir="gui/src-tauri/target/${{ matrix.target }}/release/bundle/macos"
+          ditto -c -k --keepParent "$bundle_dir/Capcap.app" \
+            "${{ github.workspace }}/${{ matrix.name }}.app.zip"
+
+      - name: Package Windows GUI (.exe and .zip)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          rel_dir="gui/src-tauri/target/${{ matrix.target }}/release"
+          cp "$rel_dir/capcap-gui.exe" "${{ github.workspace }}/${{ matrix.name }}.exe"
+          (cd "$rel_dir" && 7z a "${{ github.workspace }}/${{ matrix.name }}.zip" capcap-gui.exe ffmpeg.exe)
+          if [ -d "$rel_dir/bundle/nsis" ]; then
+            find "$rel_dir/bundle/nsis" -name "*.exe" -exec cp {} "${{ github.workspace }}/${{ matrix.name }}-setup.exe" \;
+          fi
+
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.name }}
-          path: ${{ github.workspace }}/${{ matrix.name }}.dmg
+          path: |
+            ${{ github.workspace }}/${{ matrix.name }}.dmg
+            ${{ github.workspace }}/${{ matrix.name }}.app.zip
+            ${{ github.workspace }}/${{ matrix.name }}.zip
+            ${{ github.workspace }}/${{ matrix.name }}.exe
+            ${{ github.workspace }}/${{ matrix.name }}-setup.exe
+          if-no-files-found: ignore
 
   release:
     needs: [build, build-gui]
@@ -180,10 +225,14 @@ jobs:
           files: dist/*
           generate_release_notes: true
           body: |
-            **macOS desktop app (`capcap-gui-macos-*.dmg`) is unsigned** — no Apple Developer
-            cert yet. Gatekeeper will refuse to open it with a normal double-click.
-            To run it anyway: right-click (or Control-click) `Capcap.app` > **Open** >
-            confirm **Open** in the dialog. This is a one-time step per download.
+            ### Desktop App (GUI)
+            - **macOS (`capcap-gui-macos-*.dmg` / `capcap-gui-macos-*.app.zip`)**: Unsigned (no paid Apple Developer cert). Gatekeeper will block direct double-click on first run. To open: right-click (or Control-click) `Capcap.app` > **Open** > confirm **Open** in the dialog.
+            - **Windows (`capcap-gui-windows-x86_64.exe` / `capcap-gui-windows-x86_64.zip`)**: Standalone `.exe` or bundled offline zip with `ffmpeg.exe`.
+
+            ### Command Line (CLI)
+            - macOS: `capcap-macos-*.tar.gz` (or `brew install matheusbuniotto/caption-captain/capcap`)
+            - Linux: `capcap-linux-x86_64.tar.gz`
+            - Windows: `capcap-windows-x86_64.exe` / `capcap-windows-x86_64.zip`
 
       - name: Update Homebrew formula and cask
         run: |

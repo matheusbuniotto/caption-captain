@@ -46,9 +46,10 @@ curl -fsSL https://raw.githubusercontent.com/matheusbuniotto/caption-captain/mas
 
 ### Prebuilt Binaries
 
-Download standalone executables and macOS `.dmg` bundles directly from the [latest release](../../releases/latest).
-
----
+Download prebuilt binaries directly from the [latest release](../../releases/latest):
+- **macOS (GUI)**: `.dmg` disk image installer or `.app.zip` archive (Apple Silicon & Intel)
+- **Windows (GUI & CLI)**: `.exe` standalone executables or `.zip` offline packages
+- **Linux (CLI)**: `.tar.gz` archive
 
 ## Usage
 
