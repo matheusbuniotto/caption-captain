@@ -38,6 +38,7 @@ pub enum PipelineStage {
     Done {
         srt_path: PathBuf,
         muxed_path: Option<PathBuf>,
+        language: String,
     },
 }
 
@@ -49,6 +50,9 @@ pub struct PipelineOutput {
     /// Set when embedding was skipped because the container doesn't
     /// support it (mirrors the last `SkippedEmbed` stage, if any).
     pub warning: Option<String>,
+    /// The language Whisper transcribed in (forced via `options.lang`, or
+    /// auto-detected), as an ISO 639-1 code.
+    pub language: String,
 }
 
 /// Runs the full pipeline against `video_path`, reporting progress through
@@ -71,7 +75,7 @@ pub fn process_video(
     let wav_path = audio::extract_wav(video_path, workdir.path())?;
 
     on_stage(PipelineStage::Transcribing);
-    let cues = transcribe::transcribe(&wav_path, options.lang.as_deref())?;
+    let (cues, language) = transcribe::transcribe(&wav_path, options.lang.as_deref())?;
 
     std::fs::write(&srt_path, srt::format_srt(&cues))?;
     on_stage(PipelineStage::WritingSidecar {
@@ -111,12 +115,14 @@ pub fn process_video(
     on_stage(PipelineStage::Done {
         srt_path: srt_path.clone(),
         muxed_path: muxed_path.clone(),
+        language: language.clone(),
     });
 
     Ok(PipelineOutput {
         srt_path,
         muxed_path,
         warning,
+        language,
     })
 }
 
@@ -145,6 +151,7 @@ mod tests {
         assert!(output.srt_path.is_file());
         assert!(output.muxed_path.as_deref().is_some_and(Path::is_file));
         assert!(output.warning.is_none());
+        assert_eq!(output.language, "en");
 
         assert_eq!(
             stages

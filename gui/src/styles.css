@@ -107,10 +107,17 @@ button.secondary {
   border: 1px solid #ccc;
 }
 
+.selection-section,
 .progress-section,
 .result-section,
 .error-section {
   width: 100%;
+}
+
+.selection-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
 }
 
 .stages {

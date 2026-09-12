@@ -37,6 +37,7 @@ pub enum StageEvent {
     Done {
         srt_path: String,
         muxed_path: Option<String>,
+        language: String,
     },
 }
 
@@ -55,9 +56,11 @@ impl From<&PipelineStage> for StageEvent {
             PipelineStage::Done {
                 srt_path,
                 muxed_path,
+                language,
             } => StageEvent::Done {
                 srt_path: srt_path.display().to_string(),
                 muxed_path: muxed_path.as_ref().map(|p| p.display().to_string()),
+                language: language.clone(),
             },
         }
     }
@@ -68,6 +71,7 @@ pub struct ProcessVideoResult {
     pub srt_path: String,
     pub muxed_path: Option<String>,
     pub warning: Option<String>,
+    pub language: String,
 }
 
 /// The formats the drop zone / file picker accept, for the frontend to
@@ -125,6 +129,7 @@ async fn run_pipeline<R: Runtime>(
         srt_path: output.srt_path.display().to_string(),
         muxed_path: output.muxed_path.map(|p| p.display().to_string()),
         warning: output.warning,
+        language: output.language,
     })
     .map_err(|e| format!("{e:#}"))
 }

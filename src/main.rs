@@ -86,7 +86,12 @@ fn run(
         PipelineStage::WritingSidecar { srt_path } => println!("Wrote {}", srt_path.display()),
         PipelineStage::Embedding => println!("Embedding captions..."),
         PipelineStage::SkippedEmbed { reason } => eprintln!("Warning: {reason}"),
-        PipelineStage::Done { muxed_path, .. } => {
+        PipelineStage::Done {
+            muxed_path,
+            language,
+            ..
+        } => {
+            println!("Detected language: {language}");
             if let Some(muxed_path) = muxed_path {
                 println!("Wrote {}", muxed_path.display());
             }

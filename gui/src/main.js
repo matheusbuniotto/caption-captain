@@ -1,7 +1,11 @@
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
-import { getCurrentWebview } from "@tauri-apps/api/webview";
-import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
+// No bundler serves this file (Tauri loads it as a plain static asset), so
+// bare npm-package imports like "@tauri-apps/api/core" can't resolve in the
+// webview. Use the `window.__TAURI__` globals instead (enabled via
+// `withGlobalTauri` in tauri.conf.json).
+const { invoke } = window.__TAURI__.core;
+const { listen } = window.__TAURI__.event;
+const { getCurrentWebview } = window.__TAURI__.webview;
+const { open: openFileDialog } = window.__TAURI__.dialog;
 
 const STAGE_LABELS = {
   ExtractingAudio: "Extracting Audio",
@@ -14,12 +18,17 @@ const banner = document.getElementById("banner");
 const dropZone = document.getElementById("drop-zone");
 const formatsList = document.getElementById("formats-list");
 const browseButton = document.getElementById("browse-button");
+const selectionSection = document.getElementById("selection-section");
+const selectedFilename = document.getElementById("selected-filename");
 const langInput = document.getElementById("lang-input");
+const startButton = document.getElementById("start-button");
+const cancelSelectionButton = document.getElementById("cancel-selection-button");
 const progressSection = document.getElementById("progress-section");
 const progressVideoName = document.getElementById("progress-video-name");
 const stageItems = document.querySelectorAll("#progress-stages li");
 const resultSection = document.getElementById("result-section");
 const resultMessage = document.getElementById("result-message");
+const resultLanguage = document.getElementById("result-language");
 const revealButton = document.getElementById("reveal-button");
 const openButton = document.getElementById("open-button");
 const processAnotherButton = document.getElementById("process-another-button");
@@ -29,6 +38,7 @@ const errorDismissButton = document.getElementById("error-dismiss-button");
 
 let acceptedExtensions = ["mp4", "mov", "mkv", "avi", "m4v"];
 let isProcessing = false;
+let pendingVideoPath = null;
 let lastResult = null;
 
 function showBanner(text) {
@@ -41,7 +51,7 @@ function hideBanner() {
 }
 
 function setSection(section) {
-  for (const el of [dropZone, progressSection, resultSection, errorSection]) {
+  for (const el of [dropZone, selectionSection, progressSection, resultSection, errorSection]) {
     el.classList.toggle("hidden", el !== section);
   }
 }
@@ -72,9 +82,12 @@ function markStage(stageName) {
   });
 }
 
-async function startProcessing(videoPath) {
-  if (isProcessing) {
-    showBanner("Still processing the previous video — please wait.");
+// Drop/browse only *selects* a video; processing waits for the user to
+// confirm (and optionally set a language override) on the selection
+// screen, so a drop doesn't race ahead of the user setting options.
+function selectVideo(videoPath) {
+  if (isProcessing || pendingVideoPath) {
+    showBanner("Already handling a video — finish or cancel it first.");
     return;
   }
   if (!isAcceptedVideo(videoPath)) {
@@ -82,6 +95,14 @@ async function startProcessing(videoPath) {
     return;
   }
 
+  hideBanner();
+  pendingVideoPath = videoPath;
+  selectedFilename.textContent = videoPath.split("/").pop();
+  langInput.value = "";
+  setSection(selectionSection);
+}
+
+async function startProcessing(videoPath) {
   hideBanner();
   isProcessing = true;
   resetProgressUi();
@@ -111,6 +132,7 @@ function showResult(result) {
     resultMessage.textContent = "Captioning complete.";
     openButton.classList.remove("hidden");
   }
+  resultLanguage.textContent = `Language: ${result.language}`;
   setSection(resultSection);
 }
 
@@ -132,7 +154,7 @@ getCurrentWebview().onDragDropEvent((event) => {
   } else if (event.payload.type === "drop") {
     dropZone.classList.remove("drag-over");
     const [path] = event.payload.paths;
-    if (path) startProcessing(path);
+    if (path) selectVideo(path);
   } else {
     dropZone.classList.remove("drag-over");
   }
@@ -141,7 +163,18 @@ getCurrentWebview().onDragDropEvent((event) => {
 browseButton.addEventListener("click", async () => {
   const filters = [{ name: "Video", extensions: acceptedExtensions }];
   const selected = await openFileDialog({ multiple: false, filters });
-  if (selected) startProcessing(selected);
+  if (selected) selectVideo(selected);
+});
+
+startButton.addEventListener("click", () => {
+  const videoPath = pendingVideoPath;
+  pendingVideoPath = null;
+  startProcessing(videoPath);
+});
+
+cancelSelectionButton.addEventListener("click", () => {
+  pendingVideoPath = null;
+  setSection(dropZone);
 });
 
 revealButton.addEventListener("click", () => {

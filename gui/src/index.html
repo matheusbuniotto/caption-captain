@@ -5,7 +5,7 @@
     <link rel="stylesheet" href="styles.css" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Capcap</title>
-    <script type="module" src="/main.js" defer></script>
+    <script src="/main.js" defer></script>
   </head>
 
   <body>
@@ -19,9 +19,17 @@
         <p>Drop a video here</p>
         <p class="formats" id="formats-list">Accepted: .mp4 .mov .mkv .avi .m4v</p>
         <button id="browse-button" type="button">Browse Files…</button>
+      </section>
+
+      <section id="selection-section" class="selection-section hidden">
+        <p id="selected-filename"></p>
         <div class="options">
           <label for="lang-input">Language override (optional)</label>
           <input id="lang-input" placeholder="e.g. en, pt, es — leave blank to auto-detect" />
+        </div>
+        <div class="selection-actions">
+          <button id="start-button" type="button">Start Captioning</button>
+          <button id="cancel-selection-button" type="button" class="secondary">Cancel</button>
         </div>
       </section>
 
@@ -36,6 +44,7 @@
 
       <section id="result-section" class="result-section hidden">
         <p id="result-message"></p>
+        <p id="result-language" class="formats"></p>
         <div class="result-actions">
           <button id="reveal-button" type="button">Reveal in Finder</button>
           <button id="open-button" type="button">Open in Player</button>
