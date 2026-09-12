@@ -23,6 +23,7 @@ class Capcap < Formula
 
   def install
     bin.install "capcap"
+    bin.install "ffmpeg" if File.exist?("ffmpeg")
   end
 
   test do

@@ -1,68 +1,91 @@
+# Capcap
+
+**Zero-cloud, local-first video captioning and container muxing.**
+
 <p align="center">
-  <img src="assets/gemini-banner.jpg" alt="Captain Caption" width="100%">
+  <img src="assets/screenshot.png" alt="Capcap Screenshot" width="800">
 </p>
 
-# ⚓ capcap — Captain Caption
-
-Ahoy. Your video's got no subtitles and ye keep shippin' it off to some cloud server to get 'em? That's a landlubber's move — slow, costly, and ye don't know who's readin' yer footage on the way.
-
-**`capcap` does the job right here, on yer own machine. No cloud, no upload, no accounts. Just point it at a video and it hands ye back a captioned one.**
-
-## What she does
-
-- Transcribes yer video's audio locally with a bundled Whisper model — no network needed.
-- Writes a clean `.srt` sidecar every time.
-- Embeds the captions straight into the video where the container allows it, with zero re-encoding (stream copy, not a re-render):
-  - `.mp4` / `.mov` → native `mov_text` track, ready for QuickTime.
-  - `.mkv` → native SRT subtitle stream.
-  - Anything else (`.avi`, etc.) → sidecar `.srt` only, plus a warning — embedding isn't reliable there, so we don't fake it.
-- Never touches yer original file.
-
-## Setting sail
-
-```bash
-capcap run "movie.mp4"
-```
-
-That's the whole voyage. Find `movie.srt` and `movie.captioned.mp4` next to yer original when she's done.
-
-Skip the embed, sidecar only:
-
-```bash
-capcap run "movie.mp4" --no-embed
-```
-
-Force the spoken language instead of auto-detect:
-
-```bash
-capcap run "movie.mp4" --lang en
-```
-
-## Why local-first
-
-- **Privacy** — yer footage never leaves the ship.
-- **Speed** — no upload queue, no waitin' on someone else's server.
-- **QuickTime compatibility** — Apple's players won't pick up a loose `.srt`; they want it embedded. `capcap` handles that muxing for ye.
-
-## Desktop app (macOS)
-
-Don't want a terminal? Grab `capcap-gui-macos-arm64.dmg` (Apple Silicon) or
-`capcap-gui-macos-x86_64.dmg` (Intel) from the [latest release](../../releases/latest),
-drag a video onto the window, and go.
-
-**This build is unsigned** — no Apple Developer cert yet — so Gatekeeper blocks a plain
-double-click. To open it: right-click (or Control-click) `Capcap.app` in Finder, choose
-**Open**, then confirm **Open** in the dialog. You only need to do this once per download.
-
-`capcap gui` from the CLI launches this app if it's installed next to the `capcap`
-binary or on `PATH`; otherwise it tells you how to build it from `gui/`.
-
-## Status
-
-Core CLI (transcribe → sidecar → container-aware mux) is seaworthy. The desktop app above
-is macOS-first and unsigned for now; Windows/Linux GUI builds and code signing are tracked
-in the open issues.
+Capcap transcribes speech in your videos locally on your machine using an embedded Whisper model. No cloud servers, no subscriptions, no accounts, and no network required.
 
 ---
 
-*No cloud APIs were harmed in the making of this README.*
+## Features
+
+- **100% Offline & Private** — Audio never leaves your computer; speech transcription runs locally.
+- **Fast Stream-Copy Muxing** — Embeds captions directly into the container without re-encoding video.
+- **Sidecar & Embedded Subtitles**:
+  - `.mp4` / `.mov` → Native `mov_text` subtitle track (compatible with QuickTime and Apple devices).
+  - `.mkv` → Native SRT subtitle stream.
+  - Other containers (e.g. `.avi`) → `.srt` sidecar file only.
+- **Batch Processing** — Transcribe and mux multiple videos in one go, from either the GUI or CLI.
+- **Dual Interface** — Drag-and-drop desktop app or command-line tool.
+
+---
+
+## Installation
+
+### Homebrew (macOS / Linux)
+
+```bash
+# Tap the repository
+brew tap matheusbuniotto/caption-captain https://github.com/matheusbuniotto/caption-captain
+
+# Install the CLI
+brew install capcap
+
+# Or install the Desktop App (macOS)
+brew install --cask capcap
+```
+
+### Quick Install (macOS / Linux Shell)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/matheusbuniotto/caption-captain/master/scripts/install.sh.tmpl | bash
+```
+
+### Prebuilt Binaries
+
+Download standalone executables and macOS `.dmg` bundles directly from the [latest release](../../releases/latest).
+
+---
+
+## Usage
+
+### Desktop App
+
+1. Launch **Capcap**.
+2. Drag and drop one or more video files into the window (or click **Browse Files…**).
+3. *(Optional)* Set a language code override (e.g. `en`, `pt`, `es`) or leave blank to auto-detect.
+4. Click **Start Captioning**.
+
+> **macOS Note**: The app is currently unsigned. On first launch, right-click (or Control-click) `Capcap.app` in Finder, click **Open**, and confirm in the dialog. You only need to do this once.
+
+---
+
+### Command Line
+
+```bash
+# Caption a single video
+capcap run video.mp4
+
+# Process multiple videos in batch
+capcap run video1.mp4 video2.mkv video3.mov
+
+# Specify spoken language (skips auto-detection)
+capcap run video.mp4 --lang en
+
+# Generate only the .srt sidecar (skip embedding)
+capcap run video.mp4 --no-embed
+
+# Launch the desktop GUI from the terminal
+capcap gui
+```
+
+Outputs (`video.srt` and `video.captioned.mp4`) are created right next to your original files. Original videos are never modified.
+
+---
+
+## License
+
+MIT

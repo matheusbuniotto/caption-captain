@@ -26,5 +26,9 @@ tar xzf "$tmp/$asset" -C "$tmp"
 
 install -d "$INSTALL_DIR"
 install "$tmp/capcap" "$INSTALL_DIR/capcap"
+if [ -f "$tmp/ffmpeg" ] && ! command -v ffmpeg >/dev/null 2>&1; then
+  install "$tmp/ffmpeg" "$INSTALL_DIR/ffmpeg"
+  echo "Installed bundled ffmpeg to $INSTALL_DIR/ffmpeg"
+fi
 
 echo "Installed capcap to $INSTALL_DIR/capcap"

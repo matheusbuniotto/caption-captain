@@ -1,0 +1,9 @@
+{
+  "name": "capcap-monorepo",
+  "private": true,
+  "scripts": {
+    "dev": "npm --prefix gui run dev",
+    "build": "npm --prefix gui run build",
+    "tauri": "npm --prefix gui run tauri --"
+  }
+}

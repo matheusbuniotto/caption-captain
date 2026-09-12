@@ -74,6 +74,25 @@ pub struct ProcessVideoResult {
     pub language: String,
 }
 
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct BatchItemResult {
+    pub video_path: String,
+    pub srt_path: Option<String>,
+    pub muxed_path: Option<String>,
+    pub warning: Option<String>,
+    pub language: Option<String>,
+    pub error: Option<String>,
+    pub success: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct BatchProgressPayload {
+    pub index: usize,
+    pub total: usize,
+    pub video_path: String,
+    pub stage: StageEvent,
+}
+
 /// The formats the drop zone / file picker accept, for the frontend to
 /// render before the user drops anything.
 #[tauri::command]
@@ -106,6 +125,123 @@ async fn process_video<R: Runtime>(
     result
 }
 
+/// Runs the pipeline sequentially over a batch of `video_paths`, emitting
+/// progress events for each stage and each batch item.
+#[tauri::command]
+async fn process_batch<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, ProcessingState>,
+    video_paths: Vec<String>,
+    lang: Option<String>,
+    embed: bool,
+) -> Result<Vec<BatchItemResult>, String> {
+    if video_paths.is_empty() {
+        return Err("no videos provided".to_string());
+    }
+
+    if state.0.swap(true, Ordering::SeqCst) {
+        return Err("a video is already being processed".to_string());
+    }
+
+    struct Guard<'a>(&'a AtomicBool);
+    impl<'a> Drop for Guard<'a> {
+        fn drop(&mut self) {
+            self.0.store(false, Ordering::SeqCst);
+        }
+    }
+    let _guard = Guard(&state.0);
+
+    let total = video_paths.len();
+    let mut results = Vec::with_capacity(total);
+
+    for (index, video_path) in video_paths.into_iter().enumerate() {
+        let app_handle = app.clone();
+        let current_path = video_path.clone();
+        let current_lang = lang.clone();
+
+        let _ = app.emit(
+            "batch-item-start",
+            serde_json::json!({
+                "index": index,
+                "total": total,
+                "video_path": &video_path,
+            }),
+        );
+
+        let run_result = tauri::async_runtime::spawn_blocking(move || {
+            let options = PipelineOptions {
+                lang: current_lang,
+                no_embed: !embed,
+            };
+            let app_for_stages = app_handle.clone();
+            let path_for_stages = current_path.clone();
+            pipeline::process_video(
+                std::path::Path::new(&current_path),
+                &options,
+                move |stage| {
+                    let stage_event = StageEvent::from(&stage);
+                    let _ = app_for_stages.emit("pipeline-stage", &stage_event);
+                    let _ = app_for_stages.emit(
+                        "batch-progress",
+                        BatchProgressPayload {
+                            index,
+                            total,
+                            video_path: path_for_stages.clone(),
+                            stage: stage_event,
+                        },
+                    );
+                },
+            )
+        })
+        .await
+        .map_err(|e| format!("pipeline task panicked: {e}"));
+
+        match run_result {
+            Ok(Ok(output)) => {
+                let item = BatchItemResult {
+                    video_path: video_path.clone(),
+                    srt_path: Some(output.srt_path.display().to_string()),
+                    muxed_path: output.muxed_path.map(|p| p.display().to_string()),
+                    warning: output.warning,
+                    language: Some(output.language),
+                    error: None,
+                    success: true,
+                };
+                let _ = app.emit("batch-item-complete", &item);
+                results.push(item);
+            }
+            Ok(Err(e)) => {
+                let item = BatchItemResult {
+                    video_path: video_path.clone(),
+                    srt_path: None,
+                    muxed_path: None,
+                    warning: None,
+                    language: None,
+                    error: Some(format!("{e:#}")),
+                    success: false,
+                };
+                let _ = app.emit("batch-item-complete", &item);
+                results.push(item);
+            }
+            Err(e) => {
+                let item = BatchItemResult {
+                    video_path: video_path.clone(),
+                    srt_path: None,
+                    muxed_path: None,
+                    warning: None,
+                    language: None,
+                    error: Some(e),
+                    success: false,
+                };
+                let _ = app.emit("batch-item-complete", &item);
+                results.push(item);
+            }
+        }
+    }
+
+    Ok(results)
+}
+
 /// The actual pipeline call, split out from `process_video` so it can be
 /// exercised in tests without an `AppHandle`'s state-guard bookkeeping.
 async fn run_pipeline<R: Runtime>(
@@ -134,25 +270,60 @@ async fn run_pipeline<R: Runtime>(
     .map_err(|e| format!("{e:#}"))
 }
 
-/// Reveals `path` in Finder (user story #7). macOS-only, matching this
-/// ticket's macOS-first scope.
+/// Reveals `path` in the platform file manager (Finder on macOS, Explorer on Windows, xdg-open on Linux).
 #[tauri::command]
 fn reveal_in_finder(path: String) -> Result<(), String> {
-    std::process::Command::new("open")
-        .args(["-R", &path])
-        .spawn()
-        .map_err(|e| format!("failed to reveal {path} in Finder: {e}"))?;
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .args(["-R", &path])
+            .spawn()
+            .map_err(|e| format!("failed to reveal {path} in Finder: {e}"))?;
+    }
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer")
+            .args(["/select,", &path])
+            .spawn()
+            .map_err(|e| format!("failed to reveal {path} in Explorer: {e}"))?;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let parent = std::path::Path::new(&path)
+            .parent()
+            .unwrap_or_else(|| std::path::Path::new("."));
+        std::process::Command::new("xdg-open")
+            .arg(parent)
+            .spawn()
+            .map_err(|e| format!("failed to open file manager for {path}: {e}"))?;
+    }
     Ok(())
 }
 
-/// Opens `path` in the platform-default player (user story #8), e.g.
-/// QuickTime for `.mov`/`.mp4` on macOS.
+/// Opens `path` in the platform-default player (QuickTime on macOS, default video player on Windows/Linux).
 #[tauri::command]
 fn open_in_player(path: String) -> Result<(), String> {
-    std::process::Command::new("open")
-        .arg(&path)
-        .spawn()
-        .map_err(|e| format!("failed to open {path}: {e}"))?;
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| format!("failed to open {path}: {e}"))?;
+    }
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("cmd")
+            .args(["/c", "start", "", &path])
+            .spawn()
+            .map_err(|e| format!("failed to open {path}: {e}"))?;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| format!("failed to open {path}: {e}"))?;
+    }
     Ok(())
 }
 
@@ -165,6 +336,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             accepted_extensions,
             process_video,
+            process_batch,
             reveal_in_finder,
             open_in_player
         ])
@@ -258,6 +430,99 @@ mod tests {
         .await;
 
         assert!(result.is_err(), "expected a busy error, got {result:?}");
+    }
+
+    #[tokio::test]
+    async fn process_batch_processes_multiple_videos() {
+        let app = mock_app();
+        let workdir = tempfile::tempdir().unwrap();
+        let video1 = fixture_copy(workdir.path(), "spoken-word.mp4");
+        let video2 = fixture_copy(workdir.path(), "spoken-word.avi");
+
+        let results = process_batch(
+            app.handle().clone(),
+            app.state::<ProcessingState>(),
+            vec![
+                video1.to_string_lossy().to_string(),
+                video2.to_string_lossy().to_string(),
+            ],
+            None,
+            true,
+        )
+        .await
+        .expect("batch processing should succeed");
+
+        assert_eq!(results.len(), 2);
+        assert!(results[0].success);
+        assert!(results[0].muxed_path.is_some());
+        assert!(results[0].srt_path.is_some());
+
+        assert!(results[1].success);
+        assert!(results[1].muxed_path.is_none());
+        assert!(results[1].warning.as_ref().unwrap().contains("avi"));
+    }
+
+    #[tokio::test]
+    async fn process_batch_handles_errors_gracefully() {
+        let app = mock_app();
+        let workdir = tempfile::tempdir().unwrap();
+        let video1 = fixture_copy(workdir.path(), "spoken-word.mp4");
+        let nonexistent = workdir.path().join("nonexistent.mp4");
+
+        let results = process_batch(
+            app.handle().clone(),
+            app.state::<ProcessingState>(),
+            vec![
+                video1.to_string_lossy().to_string(),
+                nonexistent.to_string_lossy().to_string(),
+            ],
+            None,
+            true,
+        )
+        .await
+        .expect("batch processing returns list with individual error status");
+
+        assert_eq!(results.len(), 2);
+        assert!(results[0].success);
+        assert!(!results[1].success);
+        assert!(results[1].error.is_some());
+    }
+
+    #[tokio::test]
+    async fn process_batch_refuses_when_busy() {
+        let app = mock_app();
+        let workdir = tempfile::tempdir().unwrap();
+        let video = fixture_copy(workdir.path(), "spoken-word.mp4");
+
+        app.state::<ProcessingState>()
+            .0
+            .store(true, Ordering::SeqCst);
+
+        let result = process_batch(
+            app.handle().clone(),
+            app.state::<ProcessingState>(),
+            vec![video.to_string_lossy().to_string()],
+            None,
+            true,
+        )
+        .await;
+
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn process_batch_empty_videos_errors() {
+        let app = mock_app();
+        let result = process_batch(
+            app.handle().clone(),
+            app.state::<ProcessingState>(),
+            vec![],
+            None,
+            true,
+        )
+        .await;
+
+        assert!(result.is_err());
     }
 
     #[test]

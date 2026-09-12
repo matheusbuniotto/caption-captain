@@ -12,7 +12,9 @@
       {
         "title": "Capcap",
         "width": 720,
-        "height": 560,
+        "height": 620,
+        "minWidth": 600,
+        "minHeight": 520,
         "dragDropEnabled": true
       }
     ],

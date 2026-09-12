@@ -180,7 +180,7 @@ jobs:
             To run it anyway: right-click (or Control-click) `Capcap.app` > **Open** >
             confirm **Open** in the dialog. This is a one-time step per download.
 
-      - name: Update Homebrew formula
+      - name: Update Homebrew formula and cask
         run: |
           version="${GITHUB_REF_NAME#v}"
 
@@ -196,10 +196,24 @@ jobs:
               Formula/capcap.rb > /tmp/formula.rb && mv /tmp/formula.rb Formula/capcap.rb
           done
 
+          if [ -f Casks/capcap.rb ]; then
+            sed -i "s/version \"[0-9.]*\"/version \"${version}\"/" Casks/capcap.rb
+            for asset in capcap-gui-macos-arm64 capcap-gui-macos-x86_64; do
+              sha=$(awk -v a="$asset" '$0 ~ a".dmg" {print $1}' dist/checksums.txt)
+              sed -i \
+                -e "s#download/v[0-9.]*/${asset}.dmg#download/${GITHUB_REF_NAME}/${asset}.dmg#" \
+                Casks/capcap.rb
+              awk -v asset="$asset" -v sha="$sha" \
+                '$0 ~ asset {f=1} f && /sha256/ {sub(/"[a-f0-9]*"/, "\"" sha "\""); f=0} {print}' \
+                Casks/capcap.rb > /tmp/cask.rb && mv /tmp/cask.rb Casks/capcap.rb
+            done
+            git add Casks/capcap.rb
+          fi
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add Formula/capcap.rb
-          git commit -m "Update Homebrew formula for ${GITHUB_REF_NAME}"
+          git commit -m "Update Homebrew formula and cask for ${GITHUB_REF_NAME}"
           git fetch origin master
           git rebase origin/master
           git push origin HEAD:master

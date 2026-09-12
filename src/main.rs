@@ -13,9 +13,10 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Transcribe (and optionally translate) a single video.
+    /// Transcribe (and optionally translate) one or more videos in batch.
     Run {
-        video: String,
+        #[arg(required = true, num_args = 1..)]
+        videos: Vec<String>,
         #[arg(long)]
         lang: Option<String>,
         #[arg(long = "translate-to")]
@@ -39,11 +40,11 @@ fn main() -> ExitCode {
 
     let result = match cli.command {
         Command::Run {
-            video,
+            videos,
             lang,
             translate_to,
             no_embed,
-        } => run(&video, lang.as_deref(), translate_to.as_deref(), no_embed),
+        } => run(&videos, lang.as_deref(), translate_to.as_deref(), no_embed),
         Command::Watch { folder, .. } => {
             println!("capcap watch: not yet implemented ({folder})");
             Ok(())
@@ -58,11 +59,12 @@ fn main() -> ExitCode {
     ExitCode::SUCCESS
 }
 
-/// Thin CLI wrapper around the shared pipeline: turns each `PipelineStage`
+/// CLI wrapper around the shared pipeline: turns each `PipelineStage`
 /// into the same `println!`/`eprintln!` calls the CLI has always made, so
-/// `tests/run_transcribe.rs` sees byte-for-byte unchanged output.
+/// `tests/run_transcribe.rs` sees byte-for-byte unchanged output for single
+/// videos, and sequential progress for batch processing.
 fn run(
-    video: &str,
+    videos: &[String],
     lang: Option<&str>,
     translate_to: Option<&str>,
     no_embed: bool,
@@ -72,32 +74,55 @@ fn run(
         "--translate-to isn't implemented yet"
     );
 
-    let video_path = Path::new(video);
-    anyhow::ensure!(video_path.is_file(), "no such video file: {video}");
+    let is_batch = videos.len() > 1;
+    let mut failed = 0;
 
-    let options = PipelineOptions {
-        lang: lang.map(str::to_string),
-        no_embed,
-    };
-
-    pipeline::process_video(video_path, &options, |stage| match stage {
-        PipelineStage::ExtractingAudio => println!("Extracting audio..."),
-        PipelineStage::Transcribing => println!("Transcribing..."),
-        PipelineStage::WritingSidecar { srt_path } => println!("Wrote {}", srt_path.display()),
-        PipelineStage::Embedding => println!("Embedding captions..."),
-        PipelineStage::SkippedEmbed { reason } => eprintln!("Warning: {reason}"),
-        PipelineStage::Done {
-            muxed_path,
-            language,
-            ..
-        } => {
-            println!("Detected language: {language}");
-            if let Some(muxed_path) = muxed_path {
-                println!("Wrote {}", muxed_path.display());
-            }
+    for (i, video) in videos.iter().enumerate() {
+        let video_path = Path::new(video);
+        if !video_path.is_file() {
+            eprintln!("error: no such video file: {video}");
+            failed += 1;
+            continue;
         }
-    })
-    .map(|_| ())
+
+        if is_batch {
+            println!("\n[{}/{}] Processing {}", i + 1, videos.len(), video);
+        }
+
+        let options = PipelineOptions {
+            lang: lang.map(str::to_string),
+            no_embed,
+        };
+
+        let res = pipeline::process_video(video_path, &options, |stage| match stage {
+            PipelineStage::ExtractingAudio => println!("Extracting audio..."),
+            PipelineStage::Transcribing => println!("Transcribing..."),
+            PipelineStage::WritingSidecar { srt_path } => println!("Wrote {}", srt_path.display()),
+            PipelineStage::Embedding => println!("Embedding captions..."),
+            PipelineStage::SkippedEmbed { reason } => eprintln!("Warning: {reason}"),
+            PipelineStage::Done {
+                muxed_path,
+                language,
+                ..
+            } => {
+                println!("Detected language: {language}");
+                if let Some(muxed_path) = muxed_path {
+                    println!("Wrote {}", muxed_path.display());
+                }
+            }
+        });
+
+        if let Err(err) = res {
+            eprintln!("error processing {video}: {err:#}");
+            failed += 1;
+        }
+    }
+
+    if failed > 0 {
+        anyhow::bail!("{failed} of {} video(s) failed to process", videos.len());
+    }
+
+    Ok(())
 }
 
 /// `capcap gui` launches the Tauri desktop app rather than reimplementing
@@ -123,22 +148,36 @@ fn launch_gui() -> anyhow::Result<()> {
         None => which_on_path(gui_binary_name),
     };
 
-    match gui_path {
-        Some(path) => {
-            std::process::Command::new(path)
-                .spawn()
-                .map_err(|e| anyhow::anyhow!("failed to launch capcap-gui: {e}"))?;
-            Ok(())
-        }
-        None => {
-            println!(
-                "capcap gui: no {gui_binary_name} found next to this binary or on PATH.\n\
-                 Build it with `cd gui && npm install && npm run tauri build`, or run it in \
-                 dev mode with `cd gui && npm install && npx tauri dev`."
-            );
-            Ok(())
+    if let Some(path) = gui_path {
+        std::process::Command::new(path)
+            .spawn()
+            .map_err(|e| anyhow::anyhow!("failed to launch capcap-gui: {e}"))?;
+        return Ok(());
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        for app_path in [
+            std::path::PathBuf::from("/Applications/Capcap.app"),
+            std::env::var("HOME")
+                .map(|h| std::path::PathBuf::from(h).join("Applications/Capcap.app"))
+                .unwrap_or_default(),
+        ] {
+            if app_path.is_dir() {
+                std::process::Command::new("open")
+                    .arg(app_path)
+                    .spawn()
+                    .map_err(|e| anyhow::anyhow!("failed to launch Capcap.app: {e}"))?;
+                return Ok(());
+            }
         }
     }
+
+    println!(
+        "capcap gui: no {gui_binary_name} found next to this binary or on PATH.\n\
+         Build it with `npm run tauri -- build`, or run it in dev mode with `npm run dev`."
+    );
+    Ok(())
 }
 
 fn which_on_path(binary_name: &str) -> Option<std::path::PathBuf> {
